@@ -1,0 +1,199 @@
+#+TITLE: SQL Murder Myster Notes
+#+AUTHOR: Jakob F. Loverde (JFL)
+#+DESCRIPTION: Notes for https://mystery.knightlab.com SQL Murder Mystery challenge
+#+STARTUP: showeverything
+#+OPTIONS: toc:2
+
+* Table of Contents :toc:
+- [[#][]]
+- [[#muder-crime-reports-from-sql-city][Muder crime reports from SQL City]]
+- [[#northwester-dr-search-for-1st-witness][Northwester Dr. (search for 1st witness)]]
+  - [[#max-address--4919][Max Address = 4919]]
+  - [[#name-of-1st-witness-morty-shapiro][Name of 1st witness: Morty Shapiro]]
+  - [[#interview-with-morty-schapiro][Interview with Morty Schapiro]]
+- [[#witness-claim-investigation][Witness Claim Investigation]]
+  - [[#morty-schapiro][Morty Schapiro]]
+  - [[#annabel-miller][Annabel Miller]]
+- [[#drivers-license][Driver's License]]
+- [[#january-9th-gym-people-combine-morty-and-annabels-claims][January 9th Gym people combine Morty and Annabel's claims]]
+- [[#the-murderer-is][THE MURDERER IS....]]
+- [[#final-ish-result][Final-ish Result]]
+- [[#jeremey-bowers-confesion][Jeremey Bowers confesion]]
+- [[#miranda-priestly][Miranda Priestly]]
+
+* TODO  
+- [X] Investigate SQL City murder [2/2]
+  - [X] Find witnesses [2/2]
+    - [X] Morty Schapiro
+    - [X] Annabel Miller 
+  - [X] Investigate Witness Claims [2/2]
+    - [X] Morty [2/2]
+        - [X] Get Fit Now Gym bag starts with **"48Z"** [2/2]
+          - [X]  Jeremey Bowers
+          - [X]  Joe Germuska
+        - [X] License plate on **Man's** car includes **"H42W"**
+          - [X]  Jeremey Bowers
+          - [X] Joe Germuska
+    - [X] Annabel Miller
+      - [X] Investigate people in the gym on Jan 9th
+  shows there is a table called "crime_scene_report"
+
+#+begin_src sql 
+  select * from crime_scene_report
+  where type = 'murder' and city = 'SQL City'
+#+end_src
+
+* Muder crime reports from SQL City
+|     date | type   | description                                                           |
+|----------+--------+-----------------------------------------------------------------------|
+| 20180215 | murder | Security footage shows that there were 2 witnesses.                   |
+|          |        | The first witness lives at the last house on "Northwestern Dr".       |
+|          |        | The second witness, named Annabel, lives somewhere on "Franklin Ave". |
+Other results didn't seem helpful...
+
+* Northwester Dr. (search for 1st witness)
+** Max Address = 4919
+#+begin_src sql
+  selct max(address_number) 
+    from person
+#+end_src
+** Name of 1st witness: Morty Shapiro 
+#+begin_src sql
+select * from person
+	where address_number = 4919
+#+end_src
+|    id | name           | license_id | address_number | address_street_name |       ssn |
+|-------+----------------+------------+----------------+---------------------+-----------|
+| 14887 | Morty Schapiro |     118009 |           4919 | Northwestern Dr     | 111564949 |
+
+** Interview with Morty Schapiro
+#+begin_src sql
+select * from interview 
+	where person_id = 14887
+#+end_src
+| person_id | transcript                                                                    |
+|-----------+-------------------------------------------------------------------------------|
+|     14887 | I heard a gunshot and then saw a man run out. He had a "Get Fit Now Gym" bag. |
+|           | number on the bag started with "48Z". Only gold members have those bags.      |
+|           | The man got into a car  with a plate that included "H42W".                    |
+* Witness Claim Investigation
+** Morty Schapiro
+*** Get Fit Now
+Need to see what cols are avail
+**** get_fit_now_member
+#+begin_src sql
+select * from get_fit_now_member
+	where id like '48Z%'
+#+end_src
+| id    | person_id | name          | membership_start_date | membership_status |
+|-------+-----------+---------------+-----------------------+-------------------|
+| 48Z38 |     49550 | Tomas Baisley |              20170203 | silver            |
+| 48Z7A |     28819 | Joe Germuska  |              20160305 | gold              |
+| 48Z55 |     67318 | Jeremy Bowers |              20160101 | gold              |
+**** get_fit_now_check_in
+I want to see what id was there around the time of the murder
+#+begin_src sql
+  select * from get_fit_now_check_in
+    where membership_id like '48Z%' 
+    and check_in_date > 20180000
+    and check_in_date < 20180215
+#+end_src
+| membership_id | check_in_date | check_in_time | check_out_time |
+|---------------+---------------+---------------+----------------|
+| 48Z7A         |      20180109 |          1600 |           1730 |
+| 48Z55         |      20180109 |          1530 |           1700 |
+This narrows it down to Joe Germuska and Jeremy Bowers. 
+
+** Annabel Miller
+#+begin_src sql
+select p.name as Name, 
+ 	   i.transcript as Transcript
+from person p
+join interview i
+	on p.id = i.person_id
+where name like 'Annabel %'
+	and address_street_name is 'Franklin Ave'
+#+end_src
+| Name    | Transcript                                                  |
+|---------+-------------------------------------------------------------|
+| Annabel | I saw the murder happen, and I recognized the killer from   |
+| Miller  | my gym when I was working out last week on January the 9th. |
+
+* Driver's License
+#+begin_src sql
+SELECT p.name AS name,
+       dl.plate_number AS plate,
+	   gfm.id as id
+FROM person p
+JOIN drivers_license dl
+    ON p.license_id = dl.id
+join get_fit_now_member gfm
+	on p.id = gfm.person_id
+WHERE dl.plate_number LIKE '%H42W%'
+	  and gfm.id like '48Z%'
+#+end_src
+| name          | plate  |
+|---------------+--------|
+| Jeremy Bowers | 0H42W2 |
+Jeremy Bowewrs is looking like the murderer! :0
+Going to look for more evidence! Jared says this sounds like a serial killer name--extra damning.
+* January 9th Gym people combine Morty and Annabel's claims
+#+begin_src sql
+SELECT p.name AS name,
+       dl.plate_number AS plate,
+       gfmci.check_in_date AS check_in_date
+FROM person p
+JOIN drivers_license dl
+    ON p.license_id = dl.id
+JOIN get_fit_now_member
+    ON p.id = get_fit_now_member.person_id
+JOIN get_fit_now_check_in gfmci
+    ON get_fit_now_member.id = gfmci.membership_id
+WHERE dl.plate_number LIKE '%H42W%'
+      AND get_fit_now_member.id LIKE '48Z%'
+      AND gfmci.check_in_date = 20180109;
+#+end_src
+| name          | plate  | check_in_date |
+|---------------+--------+---------------|
+| Jeremy Bowers | 0H42W2 |      20180109 |
+	
+* THE MURDERER IS....
+Jeremy Bowers as suspected....
+* Final-ish Result
+Congrats, you found the murderer! But wait, there's more... If you think you're up for a challenge, try querying the interview transcript of the murderer to find the real villain behind this crime. If you feel especially confident in your SQL skills, try to complete this final step with no more than 2 queries. Use this same INSERT statement with your new suspect to check your answer.
+* Jeremey Bowers confesion
+| Name   | Transcript                                                       |
+|--------+------------------------------------------------------------------|
+|        | I was hired by a woman with a lot of money.                      |
+| Jeremy | I don't know her name but I know she's                           |
+| Bowers | around 5'5" (65") or 5'7" (67"). She has red hair and she drives |
+|        | a Tesla Model S. I know that she attended the SQL                |
+|        | Symphony Concert 3 times in December 2017.                       |
+This has now officially turned into a game of S'Clue'L --credit Jared Churbuck
+* Miranda Priestly 
+Caught her with this:
+#+begin_src sql
+/*  
+  5'5" (65") <= Height <= 5'7" (67")
+  Hair color: red
+  Make: Tesla
+  Model: Model S
+  Facebook: Symphony Concert 3 times in December 2017
+  
+  Tables needed: drivers_license, person, facebook_event_checkin, income? 
+*/
+
+select p.name
+from person p
+join drivers_license dl
+	on p.license_id = dl.id
+join facebook_event_checkin f
+	on p.id = f.person_id
+where dl.hair_color is 'red' 
+		and dl.car_make is 'Tesla' 
+		and dl.car_model is 'Model S'
+		and dl.height > 64 and dl.height < 67
+		and f.date >20171131 and f.date < 20180101
+#+end_src
+Gave me a table with her name three times as expected.
+Result: "Congrats, you found the brains behind the murder! Everyone in SQL City hails you as the greatest SQL detective of all time. Time to break out the champagne!"
